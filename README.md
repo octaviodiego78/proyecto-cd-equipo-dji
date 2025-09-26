@@ -93,5 +93,5 @@ A partir de esta base se espera evolucionar hacia:
 - *Feature engineering* (nuevas variables).  
 - *Modelos base* para establecer benchmarks.  
 - *Visualizaciones y dashboards* que permitan comunicar resultados a un público no técnico.  
-
+- a
 ---
