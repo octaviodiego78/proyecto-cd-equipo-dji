@@ -24,7 +24,9 @@ EXPERIMENT_NAME = "/Users/diegooctavioperez21@gmail.com/gold_predictions"
 
 # Set tracking URI to Databricks
 mlflow.set_tracking_uri("databricks")
-print("Using Databricks MLflow tracking")
+# Unity Catalog is the default for workspaces with legacy registry disabled
+mlflow.set_registry_uri("databricks-uc")
+print("Using Databricks MLflow tracking with Unity Catalog")
 
 # Create or get experiment (auto-creates if doesn't exist)
 experiment = mlflow.set_experiment(experiment_name=EXPERIMENT_NAME)
@@ -108,9 +110,9 @@ def build_mlp(input_dim, layer1_size=64, layer2_size=32, dropout_rate=0.2, learn
 def build_cnn(input_dim, filters=32, kernel_size=3, learning_rate=0.001):
     model = keras.Sequential([
         layers.Input(shape=(input_dim, 1)),
-        layers.Conv1D(filters, kernel_size, activation='relu'),
+        layers.Conv1D(filters, kernel_size, activation='relu', padding='same'),
         layers.MaxPooling1D(2),
-        layers.Conv1D(filters//2, kernel_size, activation='relu'),
+        layers.Conv1D(filters//2, kernel_size, activation='relu', padding='same'),
         layers.Flatten(),
         layers.Dense(16, activation='relu'),
         layers.Dense(1)
@@ -269,7 +271,7 @@ def hyperopt_cnn(X_train, y_train, X_test, y_test):
     
     space = {
         'filters': hp.quniform('filters', 16, 64, 8),
-        'kernel_size': hp.quniform('kernel_size', 2, 5, 1),
+        'kernel_size': hp.quniform('kernel_size', 2, 4, 1),  # Reduced from 5 to 4 to avoid dimension issues
         'learning_rate': hp.loguniform('learning_rate', np.log(0.0001), np.log(0.01))
     }
     
@@ -364,31 +366,25 @@ def select_best_model():
     return None, None
 
 
-def register_model(run_id, model_name="equipo_dji_gold_prediction_model"):
-    model_uri = f"runs:/{run_id}/model"
+def register_model_champion(run_id):
+    """Register the best model to MLflow"""
+
+    model_name = f"workspace.default.equipo_dji_gold_prediction_model"
     
-    registered_model = mlflow.register_model(model_uri, model_name)
+    print(f"Attempting to register to: {model_name}")
+    
+    model_uri = f"runs:/{run_id}/model"
+    registered_model = mlflow.register_model(model_uri=model_uri, name=model_name)
+    
     
     client = mlflow.tracking.MlflowClient()
-    
     model_version = registered_model.version
     
-    description = f"""Gold Price Prediction Model
-- Data: gold_data.csv + sp500.csv (2020-09-28 to present)
-- Target: Next-day gold closing price
-- Features: Previous day SP500 close + gold price history
-- Date: {datetime.now().strftime('%Y-%m-%d')}
-- Team: Equipo DJI
-- Changelog: v{model_version} - Optimized model with hyperparameter tuning
-"""
+    description = f"""Best model from hyperparameter optimization"""
     
-    client.update_model_version(
-        name=model_name,
-        version=model_version,
-        description=description
-    )
+    client.update_model_version(name=model_name, version=model_version, description=description)
     
-    client.set_registered_model_alias(model_name, "champion", model_version)
+    client.set_registered_model_alias(name=model_name, alias="champion", version=model_version)
     
     return registered_model
 
@@ -399,6 +395,7 @@ def main():
     
     print("Preparing train/test split...")
     X_train, X_test, y_train, y_test, scaler, feature_cols = prepare_train_test_split(df)
+    
     
     print(f"Training data shape: {X_train.shape}")
     print(f"Test data shape: {X_test.shape}")
@@ -430,22 +427,15 @@ def main():
     best_lstm = hyperopt_lstm(X_train, y_train, X_test, y_test)
     print(f"Best LSTM params: {best_lstm}")
     
-    print("\nSelecting best model...")
+    
     best_run_id, best_mape = select_best_model()
     
     if best_run_id:
-        print(f"Best model run_id: {best_run_id}")
-        print(f"Best model MAPE: {best_mape:.4f}%")
-        
-        print("\nRegistering best model...")
-        registered_model = register_model(best_run_id)
-        print(f"Model registered: {registered_model.name} v{registered_model.version}")
-        print(f"Model URI: models:/{registered_model.name}/{registered_model.version}")
-        print(f"Alias 'champion' set to version {registered_model.version}")
+        print(f"\nBest Model - Run ID: {best_run_id} | MAPE: {best_mape:.4f}%")
+        registered = register_model_champion(best_run_id)
+        print(f"Registered as: {registered.name} v{registered.version} (alias: champion)")
     else:
-        print("No finished runs found")
-    
-    print("\nPipeline complete!")
+        print("\nNo finished runs found")
 
 
 if __name__ == "__main__":
