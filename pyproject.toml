@@ -7,7 +7,13 @@ requires-python = ">=3.11"
 dependencies = [
     "jupyter>=1.1.1",
     "matplotlib>=3.10.6",
-    "numpy>=2.3.3",
+    "numpy>=1.23.0,<2.0.0",  # TensorFlow 2.15 requires NumPy 1.x
     "pandas>=2.3.2",
     "seaborn>=0.13.2",
+    "mlflow>=2.10.0",
+    "databricks-sdk>=0.18.0",
+    "scikit-learn>=1.4.0",
+    "tensorflow>=2.15.0,<2.16.0",  # Pin to 2.15.x for NumPy 1.x compatibility
+    "hyperopt>=0.2.7",
+    "python-dotenv>=1.0.0",
 ]
