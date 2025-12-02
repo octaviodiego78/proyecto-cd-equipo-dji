@@ -3,12 +3,12 @@ FastAPI service for Gold Price Prediction
 """
 
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import numpy as np
 from datetime import datetime, timedelta
 
+# Import from local modules
 from model_utils import load_champion_model
 from preprocessing import (
     load_scaler,
@@ -24,15 +24,6 @@ app = FastAPI(
     title="Gold Price Prediction API",
     description="API for predicting tomorrow's gold price using live data from Yahoo Finance",
     version="1.0.0"
-)
-
-# Add CORS middleware to allow frontend to communicate with backend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Global variables for model, scaler, and metadata
@@ -108,6 +99,12 @@ async def startup_event():
     except Exception as e:
         print(f"Error loading components: {e}")
         print("API will not be able to make predictions until components are loaded.")
+
+
+@app.get("/")
+def root():
+    """Root endpoint"""
+    return {"message": "Gold Price Prediction API", "status": "running"}
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -190,16 +187,4 @@ def predict(request: PredictionRequest = None):
             status_code=500,
             detail=f"Error making prediction: {str(e)}"
         )
-
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    # Run the API
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        log_level="info"
-    )
 

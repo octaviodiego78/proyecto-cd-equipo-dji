@@ -16,13 +16,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY . /app/src/backend/
+COPY *.py ./
 
-# Copy data/processed directory for scaler and feature columns
-COPY ../../data/processed /app/data/processed
-
-# Copy .env file if it exists (for Databricks credentials)
-COPY ../../.env /app/.env
+# Create directory structure for data
+RUN mkdir -p /app/data/processed
 
 # Set Python path to find modules
 ENV PYTHONPATH=/app
@@ -35,4 +32,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the FastAPI application
-CMD ["uvicorn", "src.backend.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
