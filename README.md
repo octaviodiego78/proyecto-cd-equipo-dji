@@ -1,152 +1,167 @@
-# Gold Price Prediction Service
+# Servicio de Predicción del Precio del Oro
 
-A production-ready machine learning service for predicting tomorrow's gold prices using historical gold and S&P 500 data. The system leverages TensorFlow neural networks (MLP/CNN/LSTM), MLflow for model management, Prefect for orchestration, and Docker for containerization.
+Un servicio de machine learning listo para producción que predice los precios del oro del día siguiente utilizando datos históricos de oro y S&P 500. El sistema aprovecha redes neuronales de TensorFlow (MLP/CNN/LSTM), MLflow para gestión de modelos, Prefect para orquestación y Docker para containerización.
 
-## 🏗️ Architecture
+## Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Training Pipeline (Prefect)                  │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐    │
-│  │  Load    │──▶│ Feature  │──▶│  Train   │──▶│ Register │    │
-│  │  Data    │   │Engineer  │   │  Models  │   │  Champion│    │
-│  └──────────┘   └──────────┘   └──────────┘   └──────────┘    │
-│         │             │                               │          │
-│         ▼             ▼                               ▼          │
-│   data/raw/    data/processed/              MLflow Registry     │
+│                  Pipeline de Entrenamiento (Prefect)            │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐      │
+│  │  Cargar  │──▶│Ingeniería│──▶│ Entrenar │──▶│ Registrar│      │
+│  │  Datos   │   │  Features│   │  Modelos │   │  Champion│      │ 
+│  └──────────┘   └──────────┘   └──────────┘   └──────────┘      │
+│         │             │                               │         │
+│         ▼             ▼                               ▼         │
+│   data/raw/    data/processed/              Registro MLflow     │
 │   - gold_data.csv  - scaler.pkl           (Databricks)          │
 │   - sp500.csv      - feature_columns.json                       │
-│                    - model_metadata.json                         │
+│                    - model_metadata.json                        │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Prediction Service (Docker)                   │
+│                  Servicio de Predicción (Docker)                │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │              FastAPI Backend (Port 8000)                   │ │
-│  │  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────┐ │ │
-│  │  │  Fetch   │──▶│ Feature  │──▶│  Scale   │──▶│Predict │ │ │
-│  │  │Yahoo     │   │Engineer  │   │ Features │   │ (Model)│ │ │
-│  │  │Finance   │   │          │   │          │   │        │ │ │
-│  │  └──────────┘   └──────────┘   └──────────┘   └────────┘ │ │
+│  │              Backend FastAPI (Puerto 8000)                 │ │
+│  │  ┌──────────┐   ┌──────────┐    ┌──────────┐   ┌────────┐  │ │ 
+│  │  │ Obtener  │──▶│ Ingeniería│──▶│ Escalar  │──▶│Predecir│  │ │
+│  │  │Yahoo     │   │  Features │   │ Features │   │(Modelo)│  │ │
+│  │  │Finance   │   │           │   │          │   │        │  │ │
+│  │  └──────────┘   └──────────┘    └──────────┘   └────────┘  │ │
 │  └────────────────────────────────────────────────────────────┘ │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │            Streamlit Frontend (Port 8501)                  │ │
-│  │           🏆 Gold Price Prediction UI                      │ │
+│  │          Frontend Streamlit (Puerto 8501)                  │ │
+│  │              UI Predicción Precio del Oro                  │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 📋 Features
+## 📋 Características
 
-- **Live Data Integration**: Fetches real-time gold (GC=F) and S&P 500 (^GSPC) prices from Yahoo Finance
-- **Advanced ML Models**: Supports MLP, CNN, and LSTM architectures with hyperparameter optimization
-- **MLflow Integration**: Model versioning, tracking, and registry with Databricks Unity Catalog
-- **Prefect Orchestration**: Automated training pipeline with tasks and flows
-- **Production-Ready API**: FastAPI backend with health checks and proper error handling
-- **User-Friendly Interface**: Streamlit frontend for easy predictions
-- **Containerized Deployment**: Docker and docker-compose for consistent environments
+- **Integración de Datos en Vivo**: Obtiene precios en tiempo real de oro (GC=F) y S&P 500 (^GSPC) desde Yahoo Finance
+- **Modelos ML Avanzados**: Soporta arquitecturas MLP, CNN y LSTM con optimización de hiperparámetros
+- **Integración MLflow**: Versionado, seguimiento y registro de modelos con Databricks Unity Catalog
+- **Orquestación Prefect**: Pipeline de entrenamiento automatizado con tareas y flujos
+- **API Lista para Producción**: Backend FastAPI con health checks y manejo apropiado de errores
+- **Interfaz Amigable**: Frontend Streamlit para predicciones fáciles
+- **Despliegue Containerizado**: Docker y docker-compose para ambientes consistentes
 
-## 🚀 Quick Start
+##  Inicio Rápido
 
-### Prerequisites
+### Prerequisitos
 
 - Python 3.11+
-- Docker and Docker Compose
-- Databricks account with MLflow access
-- Environment variables configured (see `.env.example`)
+- Docker Desktop instalado y ejecutándose
+- Cuenta de Databricks con acceso a MLflow
+- Variables de entorno configuradas (ver `src/env.example`)
 
-### 1. Environment Setup
+### 1. Configuración del Entorno
 
-Create a `.env` file in the project root:
+Crea un archivo `.env` en la raíz del proyecto:
 
 ```bash
-DATABRICKS_HOST=https://your-workspace.databricks.com
-DATABRICKS_TOKEN=your-databricks-token
+# Copia el archivo de ejemplo
+cp src/env.example .env
+
+# Edita con tus credenciales
+nano .env
 ```
 
-### 2. Training Pipeline
+Agrega tus credenciales de Databricks:
+```bash
+DATABRICKS_HOST=https://tu-workspace.databricks.com
+DATABRICKS_TOKEN=tu-token-databricks
+```
 
-#### Run Prefect Training Flow
+### 2. Pipeline de Entrenamiento
+
+#### Ejecutar Flujo de Entrenamiento Prefect
 
 ```bash
-# Install dependencies
+# Instalar dependencias
 pip install -r src/pipelines/requirements.txt
 
-# Run the training pipeline
+# Ejecutar el pipeline de entrenamiento
 python src/pipelines/train_pipeline.py
 ```
 
-**Pipeline Tasks:**
-1. Load and prepare data from CSV files
-2. Feature engineering (lags, moving averages, volatility)
-3. Train baseline models (MLP, CNN, LSTM)
-4. Hyperparameter optimization with Hyperopt
-5. Select best model based on MAPE
-6. Register champion model to MLflow
-7. Save artifacts (scaler, feature columns, metadata)
+**Tareas del Pipeline:**
+1. Cargar y preparar datos desde archivos CSV
+2. Ingeniería de features (lags, promedios móviles, volatilidad)
+3. Entrenar modelos base (MLP, CNN, LSTM)
+4. Optimización de hiperparámetros con Hyperopt
+5. Seleccionar mejor modelo basado en MAPE
+6. Registrar modelo campeón en MLflow
+7. Guardar artefactos (scaler, columnas de features, metadata)
 
-**Outputs:**
-- `data/processed/scaler.pkl` - Fitted StandardScaler
-- `data/processed/feature_columns.json` - Feature column names
-- `data/processed/model_metadata.json` - Model type and name
-- Model registered in Databricks MLflow Registry with "champion" alias
+**Salidas:**
+- `data/processed/scaler.pkl` - StandardScaler ajustado
+- `data/processed/feature_columns.json` - Nombres de columnas de features
+- `data/processed/model_metadata.json` - Tipo de modelo y nombre
+- Modelo registrado en Databricks MLflow Registry con alias "champion"
 
-#### Prefect Flow Logs
+#### Logs del Flujo Prefect
 
-The pipeline provides detailed logging for each task:
-- Data loading statistics
-- Feature engineering progress
-- Training metrics (MAPE, RMSE, MAE, R²)
-- Model registration details
+El pipeline proporciona logging detallado para cada tarea:
+- Estadísticas de carga de datos
+- Progreso de ingeniería de features
+- Métricas de entrenamiento (MAPE, RMSE, MAE, R²)
+- Detalles de registro del modelo
 
-### 3. Running the Service
+### 3. Ejecutar el Servicio
 
-#### Option A: Docker Compose (Recommended)
+#### Opción A: Usando Script de Inicio (Recomendado)
 
 ```bash
-# Build and start services
-docker-compose up --build
+# Navegar al directorio src
+cd src/
 
-# Access the services:
-# - Frontend: http://localhost:8501
-# - Backend API: http://localhost:8000
-# - API Docs: http://localhost:8000/docs
+# Iniciar ambos servicios
+./start.sh
 ```
 
-#### Option B: Local Development
+Esto hará:
+- Construir imágenes Docker
+- Iniciar contenedores backend y frontend
+- Ejecutar health checks
+- Mostrar URLs de los servicios
 
-**Terminal 1 - Backend:**
+#### Opción B: Docker Compose Manualmente
+
 ```bash
-cd src/backend
-pip install -r requirements.txt
-python api.py
+# Navegar al directorio src
+cd src/
+
+# Construir e iniciar servicios en modo desacoplado
+docker compose up --build -d
+
+# Ver logs
+docker compose logs -f
 ```
 
-**Terminal 2 - Frontend:**
+
+### 4. Acceder a los Servicios
+
+Una vez que los contenedores estén ejecutándose (toma ~30-60 segundos para que el backend cargue el modelo):
+
+- **Frontend UI**: http://localhost:8501
+- **Documentación API**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+
+### 5. Verificar que los Servicios Estén Funcionando
+
 ```bash
-cd src/frontend
-pip install -r requirements.txt
-streamlit run app.py
-```
+# Verificar estado de contenedores
+docker compose ps
 
-### 4. Making Predictions
-
-#### Via Streamlit UI
-1. Open http://localhost:8501
-2. Click "🔮 Predict Tomorrow's Gold Price"
-3. View prediction, date, and model details
-
-#### Via API
-
-**Health Check:**
-```bash
+# Verificar salud del backend (esperar hasta que el estado sea "healthy")
 curl http://localhost:8000/health
 ```
 
-Response:
+Respuesta esperada cuando esté listo:
 ```json
 {
   "status": "healthy",
@@ -156,62 +171,158 @@ Response:
 }
 ```
 
-**Make Prediction:**
+### 6. Hacer Predicciones
+
+#### Via UI Streamlit (Más Fácil)
+1. Abrir http://localhost:8501 en tu navegador
+2. Hacer clic en **"Predict Tomorrow's Gold Price"**
+3. Esperar 15-30 segundos (obtiene datos en vivo de Yahoo Finance)
+4. Ver resultados de predicción con:
+   - Precio del oro predicho
+   - Fecha de predicción
+   - Tipo de modelo y detalles
+
+#### Via API (Para Integración)
+
+**Probar Predicción:**
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d '{"predict_tomorrow": true}'
 ```
 
-Response:
+Respuesta esperada:
 ```json
 {
-  "prediction": 1950.75,
+  "prediction": 2650.25,
   "predicted_date": "2024-12-03",
   "today_date": "2024-12-02",
-  "model_name": "workspace.default.equipo_dji_gold_prediction_model",
+  "model_name": "equipo_dji_gold_prediction_model",
   "model_type": "MLP"
 }
 ```
 
-## 🐳 Docker Configuration
+**Pruebas Interactivas de API:**
+- Abrir http://localhost:8000/docs
+- Probar endpoints directamente en el navegador
+
+## Configuración Docker
+
+### Vista General de la Arquitectura
+
+```
+┌─────────────────────────────────────────────────┐
+│           Tu Computadora (Localhost)            │
+│                                                 │
+│  ┌──────────────────┐      ┌─────────────────┐  │
+│  │    Frontend      │─────▶│    Backend      │  │
+│  │   (Streamlit)    │ HTTP │    (FastAPI)    │  │
+│  │  Contenedor      │      │   Contenedor    │  │
+│  │  Puerto: 8501    │      │   Puerto: 8000  │  │
+│  └────────┬─────────┘      └────────┬────────┘  │
+│           │                         │           │
+│           └────────┬────────────────┘           │
+│                    │                            │
+│        gold-prediction-network                  │
+│               (Bridge)                          │
+│                    │                            │
+│           ┌────────▼────────┐                   │
+│           │  Montajes Vol.  │                   │
+│           │  ../data/       │                   │
+│           │  ../.env        │                   │
+│           └─────────────────┘                   │
+└─────────────────────────────────────────────────┘
+```
+
+### Configuración Docker Compose (`src/docker-compose.yaml`)
+
+**Servicio Backend:**
+- **Contenedor**: `gold-prediction-backend`
+- **Imagen**: Python 3.11-slim con TensorFlow, FastAPI, MLflow
+- **Puertos**: 8000:8000
+- **Volúmenes**:
+  - `../data/processed:/app/data/processed:ro` (artefactos del modelo, solo lectura)
+  - `../.env:/app/.env:ro` (credenciales, solo lectura)
+- **Health Check**: Curl a `/health` cada 30s, 40s de período de inicio
+- **Variables de Entorno**:
+  - `SCALER_PATH=/app/data/processed/scaler.pkl`
+  - `FEATURE_COLS_PATH=/app/data/processed/feature_columns.json`
+  - `MODEL_METADATA_PATH=/app/data/processed/model_metadata.json`
+
+**Servicio Frontend:**
+- **Contenedor**: `gold-prediction-frontend`
+- **Imagen**: Python 3.11-slim con Streamlit
+- **Puertos**: 8501:8501
+- **Depende De**: Backend (espera estado healthy antes de iniciar)
+- **Entorno**: `API_URL=http://backend:8000`
+- **Red**: Comunica con backend via red bridge de Docker
+
+**Red:**
+- **Nombre**: `gold-prediction-network`
+- **Tipo**: Bridge (permite comunicación contenedor-a-contenedor)
+- **DNS**: Frontend resuelve hostname `backend` a IP del contenedor backend
 
 ### Backend Dockerfile (`src/backend/Dockerfile`)
 
-- Base image: `python:3.11-slim`
-- Installs: TensorFlow, FastAPI, MLflow, yfinance, pandas, scikit-learn
-- Copies: Backend code, processed data (scaler, features), `.env`
-- Exposes: Port 8000
-- Health check: `/health` endpoint
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
 
-### Frontend Dockerfile (`src/frontend/DockerFile`)
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y build-essential curl
 
-- Base image: `python:3.11-slim`
-- Installs: Streamlit, requests
-- Copies: Frontend application
-- Exposes: Port 8501
-- Environment: `API_URL=http://backend:8000`
+# Instalar paquetes Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-### Docker Compose Services
+# Copiar código backend
+COPY *.py ./
 
-**Backend:**
-- Ports: 8000:8000
-- Volumes: `data/processed` (read-only), `src/backend` (read-only)
-- Health check: 30s interval, 40s start period
-- Environment: Databricks credentials, artifact paths
+# Exponer puerto y configurar health check
+EXPOSE 8000
+HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 
-**Frontend:**
-- Ports: 8501:8501
-- Depends on: Backend (waits for healthy status)
-- Environment: `API_URL=http://backend:8000`
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-## 📊 API Endpoints
+**Características Clave:**
+- Instala TensorFlow, FastAPI, MLflow, yfinance
+- Carga artefactos del modelo desde montajes de volumen (no incorporados en la imagen)
+- Health checks automáticos cada 30s
+- CORS habilitado para comunicación con frontend
+
+### Frontend Dockerfile (`src/frontend/Dockerfile`)
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+
+# Instalar Streamlit y dependencias
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar app frontend
+COPY app.py .
+
+EXPOSE 8501
+ENV API_URL=http://backend:8000
+
+CMD ["streamlit", "run", "app.py", "--server.port=8501", 
+     "--server.address=0.0.0.0", "--server.headless=true"]
+```
+
+**Características Clave:**
+- Aplicación Streamlit ligera
+- Conecta al backend via red Docker
+- Variable de entorno para configuración de URL API
+
+## Endpoints de la API
 
 ### GET /health
 
-Health check endpoint to verify service status.
+Endpoint de health check para verificar el estado del servicio.
 
-**Response:**
+**Respuesta:**
 ```json
 {
   "status": "healthy",
@@ -223,16 +334,16 @@ Health check endpoint to verify service status.
 
 ### POST /predict
 
-Predict tomorrow's gold price using live data.
+Predice el precio del oro de mañana usando datos en vivo.
 
-**Request Body:**
+**Cuerpo de la Solicitud:**
 ```json
 {
   "predict_tomorrow": true
 }
 ```
 
-**Response:**
+**Respuesta:**
 ```json
 {
   "prediction": 1950.75,
@@ -243,317 +354,258 @@ Predict tomorrow's gold price using live data.
 }
 ```
 
-**Prediction Flow:**
-1. Fetch last 30 days of gold and S&P 500 prices from Yahoo Finance
-2. Merge and sort data by date
-3. Apply feature engineering (same as training):
-   - Lag features (1-2 days) for gold and S&P 500
-   - 5-day moving averages
-   - 5-day volatility (gold)
-   - S&P 500 returns (lag 1)
-4. Extract features for most recent date
-5. Scale features using saved `StandardScaler`
-6. Reshape based on model type (MLP, CNN, LSTM)
-7. Predict tomorrow's price
-8. Return prediction with metadata
+**Flujo de Predicción:**
+1. Obtener últimos 30 días de precios de oro y S&P 500 desde Yahoo Finance
+2. Fusionar y ordenar datos por fecha
+3. Aplicar ingeniería de features (igual que en entrenamiento):
+   - Features de lag (1-2 días) para oro y S&P 500
+   - Promedios móviles de 5 días
+   - Volatilidad de 5 días (oro)
+   - Retornos S&P 500 (lag 1)
+4. Extraer features para la fecha más reciente
+5. Escalar features usando `StandardScaler` guardado
+6. Remodelar basado en tipo de modelo (MLP, CNN, LSTM)
+7. Predecir precio de mañana
+8. Retornar predicción con metadata
 
-## 🚢 Deploying to HuggingFace Spaces
+##  Despliegue en HuggingFace Spaces
 
-### Step 1: Prepare Repository
+Este proyecto se despliega como **dos Spaces separados** en HuggingFace:
+1. **Backend Space**: API FastAPI en puerto 7860
+2. **Frontend Space**: UI Streamlit en puerto 7860 (conecta al backend)
 
-Create a HuggingFace Space with Docker SDK:
+### Arquitectura de Despliegue HuggingFace
 
-1. Go to https://huggingface.co/spaces
-2. Click "Create new Space"
-3. Name: `gold-price-prediction`
+```
+┌────────────────────────────────────────────────────┐
+│              HuggingFace Spaces                    │
+│                                                    │
+│  ┌─────────────────────┐   ┌──────────────────┐    │
+│  │  Frontend Space     │──▶│  Backend Space   │    │
+│  │  (Streamlit)        │   │  (FastAPI)       │    │
+│  │  Puerto: 7860       │   │  Puerto: 7860    │    │
+│  │                     │   │                  │    │
+│  │  - app.py           │   │  - api.py        │    │
+│  │  - requirements.txt │   │  - model_utils.py│    │
+│  │  - Dockerfile       │   │  - data_fetcher.py│   │
+│  │                     │   │  - preprocessing.py│  │
+│  │                     │   │  - data/         │    │
+│  │                     │   │  - requirements  │    │
+│  │                     │   │  - Dockerfile    │    │
+│  └─────────────────────┘   └──────────────────┘    │
+│           │                         │              │
+│           ▼                         ▼              │
+│  your-frontend.hf.space    your-backend.hf.space   │
+└────────────────────────────────────────────────────┘
+```
+
+### Paso 1: Crear Backend Space
+
+#### 1.1 Crear Space
+1. Ir a https://huggingface.co/spaces
+2. Hacer clic en "Create new Space"
+3. Nombre: `gold-predictions-backend`
 4. SDK: **Docker**
-5. Hardware: CPU Basic (or GPU if available)
+5. Hardware: CPU Basic (mínimo 4GB RAM recomendado)
 
-### Step 2: Repository Structure
+#### 1.2 Estructura del Backend Space
 
-Your Space should have this structure:
 ```
-.
-├── Dockerfile              # Main Dockerfile for HF Spaces
-├── docker-compose.yaml     # (Optional, for local testing)
-├── src/
-│   ├── backend/
-│   │   ├── api.py
-│   │   ├── preprocessing.py
-│   │   ├── model_utils.py
-│   │   └── data_fetcher.py
-│   └── frontend/
-│       └── app.py
-├── data/
-│   └── processed/
-│       ├── scaler.pkl
-│       ├── feature_columns.json
-│       └── model_metadata.json
-└── requirements.txt
+gold-predictions-backend/
+├── README.md              # Descripción del backend
+├── Dockerfile             # Contenedor Docker
+├── requirements.txt       # Dependencias Python
+├── api.py                # Aplicación FastAPI
+├── preprocessing.py      # Utilidades de preprocesamiento
+├── model_utils.py        # Carga de modelo MLflow
+├── data_fetcher.py       # Obtención de datos Yahoo Finance
+└── data/
+    └── processed/
+        ├── scaler.pkl
+        ├── feature_columns.json
+        └── model_metadata.json
 ```
 
-### Step 3: HuggingFace Dockerfile
-
-Create a `Dockerfile` for HuggingFace Spaces (combines backend and frontend):
+#### 1.3 Dockerfile Backend
 
 ```dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Instalar dependencias del sistema y uv
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Copy requirements and install
-COPY src/backend/requirements.txt backend-requirements.txt
-COPY src/frontend/requirements.txt frontend-requirements.txt
+# Agregar uv al PATH
+ENV PATH="/root/.local/bin:$PATH"
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r backend-requirements.txt && \
-    pip install --no-cache-dir -r frontend-requirements.txt
+# Copiar requirements
+COPY requirements.txt .
 
-# Copy application code
-COPY src/ /app/src/
+# Instalar dependencias Python con uv
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# Copiar código backend
+COPY *.py ./
+
+# Copiar datos procesados
 COPY data/processed/ /app/data/processed/
 
-# Copy .env file (add secrets in HF Spaces settings instead)
-# COPY .env /app/.env
-
-# Set environment variables
+# Configurar variables de entorno
 ENV PYTHONPATH=/app
-ENV API_URL=http://localhost:8000
 
-# Expose ports
-EXPOSE 8000 8501
+# Exponer puerto FastAPI (HuggingFace usa 7860)
+EXPOSE 7860
 
-# Create startup script to run both services
-RUN echo '#!/bin/bash\n\
-uvicorn src.backend.api:app --host 0.0.0.0 --port 8000 &\n\
-sleep 10\n\
-streamlit run src/frontend/app.py --server.port=8501 --server.address=0.0.0.0\n\
-' > /app/start.sh && chmod +x /app/start.sh
-
-CMD ["/app/start.sh"]
+# Iniciar FastAPI en puerto 7860
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "7860"]
 ```
 
-### Step 4: Add Secrets in HuggingFace Spaces
 
-1. Go to your Space settings
-2. Add Repository Secrets:
-   - `DATABRICKS_HOST`: Your Databricks workspace URL
-   - `DATABRICKS_TOKEN`: Your Databricks access token
+### Paso 2: Crear Frontend Space
 
-### Step 5: Push to HuggingFace
+#### 2.1 Crear Space
+1. Ir a https://huggingface.co/spaces
+2. Hacer clic en "Create new Space"
+3. Nombre: `gold-predictions-frontend`
+4. SDK: **Docker**
+5. Hardware: CPU Basic
 
-```bash
-# Clone your Space repository
-git clone https://huggingface.co/spaces/YOUR_USERNAME/gold-price-prediction
-cd gold-price-prediction
+#### 2.2 Estructura del Frontend Space
 
-# Copy files
-cp -r src/ .
-cp -r data/processed/ .
-cp Dockerfile .
-
-# Commit and push
-git add .
-git commit -m "Initial deployment"
-git push
+```
+gold-predictions-frontend/
+├── README.md              # Descripción del frontend
+├── Dockerfile             # Contenedor Docker
+├── requirements.txt       # Dependencias Python
+├── app.py                # Aplicación Streamlit
+└── .streamlit/           # (Opcional) Configuración Streamlit
+    └── config.toml
 ```
 
-### Step 6: Monitor Deployment
+#### 2.3 Dockerfile Frontend
 
-- HuggingFace will automatically build and deploy
-- Check build logs in the Space's "Logs" tab
-- Once deployed, access at: `https://huggingface.co/spaces/YOUR_USERNAME/gold-price-prediction`
+```dockerfile
+FROM python:3.11-slim
 
-### Screenshots Required
+WORKDIR /app
 
-Capture screenshots of:
-1. **Streamlit UI**: Showing prediction result
-2. **API Documentation**: `http://localhost:8000/docs`
-3. **HuggingFace Space**: Running service
-4. **Prefect Flow Logs**: Training pipeline execution
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-### Troubleshooting HuggingFace Deployment
+# Copiar requirements
+COPY requirements.txt .
 
-**Issue: Model loading fails**
-- Ensure Databricks secrets are correctly set
-- Check that `data/processed/` artifacts are included
-- Verify network access to Databricks
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements.txt
 
-**Issue: Services don't start**
-- Check logs for port conflicts
-- Ensure startup script waits for backend to be ready
-- Verify Python dependencies are compatible
+# Copiar app
+COPY app.py .
+COPY .streamlit/ .streamlit/
 
-**Issue: Out of memory**
-- Upgrade to larger hardware tier
-- Reduce model size or use quantization
-- Consider serving only backend API
+# Configurar variables de entorno
+ENV PYTHONPATH=/app
 
-## 🛠️ Project Structure
+# Exponer puerto Streamlit (HuggingFace usa 7860)
+EXPOSE 7860
+
+# Iniciar Streamlit en puerto 7860
+CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0", "--server.headless=true"]
+```
+
+#### 2.4 Configurar URL del Backend
+
+En `app.py`, asegúrate de que la URL del backend apunte a tu Backend Space:
+
+```python
+# API URL - Apunta al Backend Space desplegado
+API_URL = os.getenv("API_URL", "https://TU_USUARIO-gold-predictions-backend.hf.space")
+```
+
+
+
+Una vez desplegados ambos Spaces:
+
+- **Frontend UI**: `https://huggingface.co/spaces/TU_USUARIO/gold-predictions-frontend`
+- **Backend API**: `https://huggingface.co/spaces/TU_USUARIO/gold-predictions-backend`
+- **API Docs**: `https://TU_USUARIO-gold-predictions-backend.hf.space/docs`
+
 
 ```
 proyecto-cd-equipo-dji/
 ├── src/
 │   ├── backend/
-│   │   ├── api.py                  # FastAPI application
-│   │   ├── preprocessing.py        # Feature engineering utilities
-│   │   ├── model_utils.py          # MLflow model loading
-│   │   ├── data_fetcher.py         # Yahoo Finance integration
-│   │   ├── requirements.txt        # Backend dependencies
-│   │   └── Dockerfile              # Backend container
+│   │   ├── api.py                  # Aplicación FastAPI con CORS
+│   │   ├── preprocessing.py        # Utilidades de ingeniería de features
+│   │   ├── model_utils.py          # Carga de modelo MLflow
+│   │   ├── data_fetcher.py         # Integración Yahoo Finance
+│   │   ├── requirements.txt        # Dependencias backend
+│   │   ├── Dockerfile              # Definición contenedor backend
+│   │   └── .dockerignore           # Optimización de build
 │   ├── frontend/
-│   │   ├── app.py                  # Streamlit application
-│   │   ├── requirements.txt        # Frontend dependencies
-│   │   └── DockerFile              # Frontend container
-│   └── pipelines/
-│       └── train_pipeline.py       # Prefect training flow
+│   │   ├── app.py                  # Aplicación Streamlit
+│   │   ├── requirements.txt        # Dependencias frontend
+│   │   ├── Dockerfile              # Definición contenedor frontend
+│   │   └── .dockerignore           # Optimización de build
+│   ├── pipelines/
+│   │   └── train_pipeline.py       # Flujo de entrenamiento Prefect
+│   ├── docker-compose.yaml         # Orquestación multi-contenedor
+│   ├── start.sh                    # Script de inicio rápido (ejecutable)
+│   ├── env.example                 # Template variables de entorno
+│   └── README.md                   # Guía de despliegue Docker
 ├── data/
 │   ├── raw/
-│   │   ├── gold_data.csv           # Historical gold prices
-│   │   └── sp500.csv               # Historical S&P 500 data
+│   │   ├── gold_data.csv           # Precios históricos de oro
+│   │   └── sp500.csv               # Datos históricos S&P 500
 │   └── processed/
-│       ├── scaler.pkl              # Fitted StandardScaler
-│       ├── feature_columns.json    # Feature names
-│       └── model_metadata.json     # Model type and name
-├── docker-compose.yaml             # Multi-container orchestration
-├── .env                            # Environment variables (not in git)
-└── README.md                       # This file
+│       ├── scaler.pkl              # StandardScaler ajustado
+│       ├── feature_columns.json    # Nombres de features
+│       └── model_metadata.json     # Tipo y nombre de modelo
+├── notebooks/
+│   ├── 01_eda_inicial.ipynb        # Análisis exploratorio de datos
+│   └── 02_data_wrangling.ipynb     # Preparación de datos
+├── informe_escrito/
+│   └── 00_informe_final.ipynb      # Informe final
+├── huggingface/
+│   ├── gold-predictions-backend/   # Backend para HuggingFace Space
+│   │   ├── Dockerfile
+│   │   ├── api.py
+│   │   ├── requirements.txt
+│   │   ├── preprocessing.py
+│   │   ├── model_utils.py
+│   │   ├── data_fetcher.py
+│   │   └── data/processed/
+│   └── gold-predictions-frontend/  # Frontend para HuggingFace Space
+│       ├── Dockerfile
+│       ├── app.py
+│       └── requirements.txt
+├── .env                            # Variables de entorno (no en git)
+├── .gitignore                      # Reglas de ignore de Git
+└── README.md                       # Este archivo (documentación principal)
 ```
 
-## 📦 Dependencies
+##  Dependencias
 
 ### Backend
-- `fastapi>=0.109.0` - Modern web framework
-- `uvicorn>=0.27.0` - ASGI server
-- `tensorflow>=2.15.0` - Neural network models
-- `mlflow>=2.10.0` - Model tracking and registry
-- `yfinance>=0.2.35` - Yahoo Finance data
-- `pandas>=2.1.0` - Data manipulation
-- `scikit-learn>=1.3.0` - Preprocessing and metrics
+- `fastapi>=0.109.0` - Framework web moderno
+- `uvicorn>=0.27.0` - Servidor ASGI
+- `tensorflow>=2.15.0` - Modelos de redes neuronales
+- `mlflow>=2.10.0` - Seguimiento y registro de modelos
+- `yfinance>=0.2.35` - Datos de Yahoo Finance
+- `pandas>=2.1.0` - Manipulación de datos
+- `scikit-learn>=1.3.0` - Preprocesamiento y métricas
 
 ### Frontend
-- `streamlit>=1.30.0` - Interactive web app
-- `requests>=2.31.0` - HTTP client
+- `streamlit>=1.30.0` - Aplicación web interactiva
+- `requests>=2.31.0` - Cliente HTTP
 
-### Training Pipeline
-- `prefect>=3.0.0` - Workflow orchestration
-- `hyperopt>=0.2.7` - Hyperparameter optimization
-- All backend dependencies
-
-## 🔧 Configuration
-
-### Environment Variables
-
-**Required:**
-- `DATABRICKS_HOST` - Databricks workspace URL
-- `DATABRICKS_TOKEN` - Databricks personal access token
-
-**Optional:**
-- `SCALER_PATH` - Path to scaler file (default: `data/processed/scaler.pkl`)
-- `FEATURE_COLS_PATH` - Path to feature columns (default: `data/processed/feature_columns.json`)
-- `MODEL_METADATA_PATH` - Path to model metadata (default: `data/processed/model_metadata.json`)
-- `API_URL` - Backend API URL for frontend (default: `http://localhost:8000`)
-
-## 🧪 Testing
-
-### Test Training Pipeline
-```bash
-python src/pipelines/train_pipeline.py
-```
-
-### Test Backend API
-```bash
-# Start backend
-python src/backend/api.py
-
-# In another terminal, test endpoints
-curl http://localhost:8000/health
-curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{"predict_tomorrow": true}'
-```
-
-### Test Frontend
-```bash
-streamlit run src/frontend/app.py
-```
-
-### Test Docker Services
-```bash
-docker-compose up --build
-```
-
-## 📝 Logs and Monitoring
-
-### View Container Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Backend only
-docker-compose logs -f backend
-
-# Frontend only
-docker-compose logs -f frontend
-```
-
-### Monitor Prefect Flows
-```bash
-# View flow runs
-prefect deployment run 'Gold Price Prediction Training Pipeline'
-
-# Check flow status
-prefect flow-run ls
-```
-
-### MLflow Tracking
-- View experiments in Databricks MLflow UI
-- Track metrics: MAPE, RMSE, MAE, R²
-- Compare model versions
-- View artifacts and parameters
-
-## 🛑 Stopping Services
-
-```bash
-# Stop Docker containers
-docker-compose down
-
-# Stop and remove volumes
-docker-compose down -v
-
-# Stop local processes
-# Press Ctrl+C in terminal running the service
-```
-
-## 📄 License
-
-This project is part of the ITESO Ciencia de Datos program.
-
-## 👥 Team
-
-Equipo DJI - ITESO Proyecto Ciencia de Datos
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📞 Support
-
-For issues or questions:
-- Check logs: `docker-compose logs`
-- Verify environment variables
-- Ensure Databricks credentials are correct
-- Check network connectivity to Yahoo Finance
-
----
-
-**Note**: This service uses live data from Yahoo Finance. Predictions are for educational purposes only and should not be used for financial decisions.
-
+### Pipeline de Entrenamiento
+- `prefect>=3.0.0` - Orquestación de flujos de trabajo
+- `hyperopt>=0.2.7` - Optimización de hiperparámetros
+- Todas las dependencias del backend
