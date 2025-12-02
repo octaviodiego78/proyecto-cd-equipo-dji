@@ -186,7 +186,8 @@ def prepare_features_for_prediction(gold_df, sp500_df, scaler, feature_cols):
         feature_cols: List of feature column names
         
     Returns:
-        Scaled feature array for the most recent date
+        Scaled feature array for the most recent date (as numpy array)
+        Latest date (as pandas Timestamp)
     """
     # Merge and prepare data
     df = load_and_prepare_data(gold_df, sp500_df)
@@ -206,5 +207,8 @@ def prepare_features_for_prediction(gold_df, sp500_df, scaler, feature_cols):
     # Scale features
     X_scaled = scaler.transform(X)
     
-    return X_scaled, latest_row['Date'].values[0]
+    # Return date as pandas Timestamp (not numpy datetime64)
+    latest_date = pd.Timestamp(latest_row['Date'].iloc[0])
+    
+    return X_scaled, latest_date
 

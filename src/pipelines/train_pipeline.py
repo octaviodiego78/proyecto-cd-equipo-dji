@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import mlflow
 import mlflow.tensorflow
+from mlflow.models import infer_signature
 from dotenv import load_dotenv
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -16,7 +17,8 @@ from datetime import datetime
 from prefect import flow, task
 
 # Add project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# train_pipeline.py is in src/pipelines/, so we need to go up 3 levels to reach project root
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Import preprocessing utilities
 from src.backend.preprocessing import (
@@ -93,9 +95,14 @@ def prepare_train_test_split(df):
     X = df[feature_cols].values
     y = df['Close_gold'].values
     
+    print(f"Total samples: {len(X)}")
+    print(f"Features: {len(feature_cols)}")
+    
     train_size = int(len(X) * 0.8)
     X_train, X_test = X[:train_size], X[train_size:]
     y_train, y_test = y[:train_size], y[train_size:]
+    
+    print(f"Training samples: {len(X_train)}, Test samples: {len(X_test)}")
     
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
@@ -147,14 +154,19 @@ def build_lstm(input_dim, units1=32, units2=16, dropout_rate=0.2, learning_rate=
     return model
 
 
-def train_and_log_model(model, X_train, y_train, X_test, y_test, model_name, params, epochs=50, batch_size=16):
+def train_and_log_model(model, X_train, y_train, X_test, y_test, model_name, params, epochs=50, batch_size=32):
     print(f"Training {model_name} ({epochs} epochs)...")
     with mlflow.start_run(run_name=model_name) as run:
         start_time = time.time()
         
+        # Adjust batch size if needed
+        effective_batch_size = min(batch_size, len(X_train) // 4)  # At least 4 batches
+        if effective_batch_size < 1:
+            effective_batch_size = len(X_train)
+        
         # Train without validation - just fit on training data
-        print(f"Starting fit()...")
-        history = model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, verbose=2)
+        print(f"Starting fit() with batch_size={effective_batch_size}...")
+        history = model.fit(X_train, y_train, epochs=epochs, batch_size=effective_batch_size, verbose=2)
         print(f"Fit complete!")
         
         training_time = time.time() - start_time
@@ -187,6 +199,17 @@ def train_and_log_model(model, X_train, y_train, X_test, y_test, model_name, par
         mlflow.log_artifact(f'predictions_{model_name}.csv')
         os.remove(f'predictions_{model_name}.csv')
         
+        # Infer signature from training data and predictions (required for Unity Catalog)
+        signature = infer_signature(X_train, y_pred)
+        
+        # Manually log the model with signature to ensure it's saved (required for Unity Catalog)
+        mlflow.tensorflow.log_model(
+            model,
+            "model",
+            signature=signature,
+            input_example=X_train[:5] if len(X_train) >= 5 else X_train
+        )
+        
         print(f"{model_name} complete (MAPE: {mape:.4f}%, Time: {training_time:.1f}s)")
         return run.info.run_id, mape
 
@@ -201,9 +224,9 @@ def train_mlp_baseline(X_train, y_train, X_test, y_test):
         "dropout_rate": 0.2,
         "learning_rate": 0.001,
         "epochs": 50,
-        "batch_size": 16
+        "batch_size": 32
     }
-    return train_and_log_model(model, X_train, y_train, X_test, y_test, "MLP_baseline", params)
+    return train_and_log_model(model, X_train, y_train, X_test, y_test, "MLP_baseline", params, batch_size=32)
 
 
 @task(name="Train CNN Baseline", log_prints=True)
@@ -218,9 +241,9 @@ def train_cnn_baseline(X_train, y_train, X_test, y_test):
         "kernel_size": 3,
         "learning_rate": 0.001,
         "epochs": 50,
-        "batch_size": 16
+        "batch_size": 32
     }
-    return train_and_log_model(model, X_train_cnn, y_train, X_test_cnn, y_test, "CNN_baseline", params)
+    return train_and_log_model(model, X_train_cnn, y_train, X_test_cnn, y_test, "CNN_baseline", params, batch_size=32)
 
 
 @task(name="Train LSTM Baseline", log_prints=True)
@@ -236,24 +259,28 @@ def train_lstm_baseline(X_train, y_train, X_test, y_test):
         "dropout_rate": 0.2,
         "learning_rate": 0.001,
         "epochs": 50,
-        "batch_size": 16
+        "batch_size": 32
     }
-    return train_and_log_model(model, X_train_lstm, y_train, X_test_lstm, y_test, "LSTM_baseline", params)
+    return train_and_log_model(model, X_train_lstm, y_train, X_test_lstm, y_test, "LSTM_baseline", params, batch_size=32)
 
 
 @task(name="Hyperopt MLP", log_prints=True)
 def hyperopt_mlp(X_train, y_train, X_test, y_test):
+    # Reduced search space for faster training
     space = {
-        'layer1_size': hp.quniform('layer1_size', 32, 128, 16),
-        'layer2_size': hp.quniform('layer2_size', 16, 64, 8),
-        'dropout_rate': hp.uniform('dropout_rate', 0.1, 0.5),
-        'learning_rate': hp.loguniform('learning_rate', np.log(0.0001), np.log(0.01))
+        'layer1_size': hp.quniform('layer1_size', 48, 96, 16),  # Reduced from 32-128
+        'layer2_size': hp.quniform('layer2_size', 24, 48, 8),  # Reduced from 16-64
+        'dropout_rate': hp.uniform('dropout_rate', 0.15, 0.35),  # Reduced from 0.1-0.5
+        'learning_rate': hp.loguniform('learning_rate', np.log(0.0005), np.log(0.005))  # Narrowed range
     }
     
     def objective(params):
         print(f"Hyperopt iteration...")
         start_time = time.time()
         with mlflow.start_run(nested=True):
+            # Disable autologging for hyperopt runs to avoid interference with nested runs
+            mlflow.tensorflow.autolog(disable=True)
+            
             model = build_mlp(
                 X_train.shape[1],
                 int(params['layer1_size']),
@@ -262,8 +289,11 @@ def hyperopt_mlp(X_train, y_train, X_test, y_test):
                 params['learning_rate']
             )
             
-            # Train without validation
-            model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=0)
+            # Adjust batch size safely
+            batch_size = min(32, max(16, len(X_train) // 10))
+            
+            # Reduced epochs for faster hyperopt iterations
+            model.fit(X_train, y_train, epochs=20, batch_size=batch_size, verbose=0)
             
             y_pred = model.predict(X_test, verbose=0).flatten()
             mape = calculate_mape(y_test, y_pred)
@@ -279,7 +309,7 @@ def hyperopt_mlp(X_train, y_train, X_test, y_test):
     
     with mlflow.start_run(run_name="MLP_hyperopt"):
         trials = Trials()
-        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=20, trials=trials)
+        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=5, trials=trials)  # Reduced from 20 to 5
         return best
 
 
@@ -288,16 +318,20 @@ def hyperopt_cnn(X_train, y_train, X_test, y_test):
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
     
+    # Reduced search space for faster training
     space = {
-        'filters': hp.quniform('filters', 16, 64, 8),
-        'kernel_size': hp.quniform('kernel_size', 2, 4, 1),  # Reduced from 5 to 4 to avoid dimension issues
-        'learning_rate': hp.loguniform('learning_rate', np.log(0.0001), np.log(0.01))
+        'filters': hp.quniform('filters', 24, 48, 8),  # Reduced from 16-64
+        'kernel_size': hp.quniform('kernel_size', 2, 3, 1),  # Reduced from 2-4
+        'learning_rate': hp.loguniform('learning_rate', np.log(0.0005), np.log(0.005))  # Narrowed range
     }
     
     def objective(params):
         print(f"Hyperopt iteration (CNN)...")
         start_time = time.time()
         with mlflow.start_run(nested=True):
+            # Disable autologging for hyperopt runs to avoid interference with nested runs
+            mlflow.tensorflow.autolog(disable=True)
+            
             model = build_cnn(
                 X_train.shape[1],
                 int(params['filters']),
@@ -305,8 +339,11 @@ def hyperopt_cnn(X_train, y_train, X_test, y_test):
                 params['learning_rate']
             )
             
-            # Train without validation
-            model.fit(X_train_cnn, y_train, epochs=50, batch_size=16, verbose=0)
+            # Adjust batch size safely
+            batch_size = min(32, max(16, len(X_train) // 10))
+            
+            # Reduced epochs for faster hyperopt iterations
+            model.fit(X_train_cnn, y_train, epochs=20, batch_size=batch_size, verbose=0)
             
             y_pred = model.predict(X_test_cnn, verbose=0).flatten()
             mape = calculate_mape(y_test, y_pred)
@@ -322,7 +359,7 @@ def hyperopt_cnn(X_train, y_train, X_test, y_test):
     
     with mlflow.start_run(run_name="CNN_hyperopt"):
         trials = Trials()
-        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=20, trials=trials)
+        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=5, trials=trials)  # Reduced from 20 to 5
         return best
 
 
@@ -331,17 +368,21 @@ def hyperopt_lstm(X_train, y_train, X_test, y_test):
     X_train_lstm = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_lstm = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
     
+    # Reduced search space for faster training
     space = {
-        'units1': hp.quniform('units1', 16, 64, 8),
-        'units2': hp.quniform('units2', 8, 32, 4),
-        'dropout_rate': hp.uniform('dropout_rate', 0.1, 0.5),
-        'learning_rate': hp.loguniform('learning_rate', np.log(0.0001), np.log(0.01))
+        'units1': hp.quniform('units1', 24, 48, 8),  # Reduced from 16-64
+        'units2': hp.quniform('units2', 12, 24, 4),  # Reduced from 8-32
+        'dropout_rate': hp.uniform('dropout_rate', 0.15, 0.35),  # Reduced from 0.1-0.5
+        'learning_rate': hp.loguniform('learning_rate', np.log(0.0005), np.log(0.005))  # Narrowed range
     }
     
     def objective(params):
         print(f"Hyperopt iteration (LSTM)...")
         start_time = time.time()
         with mlflow.start_run(nested=True):
+            # Disable autologging for hyperopt runs to avoid interference with nested runs
+            mlflow.tensorflow.autolog(disable=True)
+            
             model = build_lstm(
                 X_train.shape[1],
                 int(params['units1']),
@@ -350,8 +391,11 @@ def hyperopt_lstm(X_train, y_train, X_test, y_test):
                 params['learning_rate']
             )
             
-            # Train without validation
-            model.fit(X_train_lstm, y_train, epochs=50, batch_size=16, verbose=0)
+            # Adjust batch size safely
+            batch_size = min(32, max(16, len(X_train) // 10))
+            
+            # Reduced epochs for faster hyperopt iterations
+            model.fit(X_train_lstm, y_train, epochs=20, batch_size=batch_size, verbose=0)
             
             y_pred = model.predict(X_test_lstm, verbose=0).flatten()
             mape = calculate_mape(y_test, y_pred)
@@ -367,16 +411,18 @@ def hyperopt_lstm(X_train, y_train, X_test, y_test):
     
     with mlflow.start_run(run_name="LSTM_hyperopt"):
         trials = Trials()
-        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=20, trials=trials)
+        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=5, trials=trials)  # Reduced from 20 to 5
         return best
 
 
 @task(name="Select Best Model", log_prints=True)
 def select_best_model():
     experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+    # Filter to only parent runs (not nested) that have model_type tag and models logged
+    # Nested hyperopt runs don't have model_type tag and don't log models
     runs = mlflow.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="status = 'FINISHED'",
+        filter_string="status = 'FINISHED' AND tags.model_type != ''",
         order_by=["metrics.test_mape ASC"],
         max_results=1
     )
@@ -397,7 +443,6 @@ def register_model_champion(run_id):
     
     model_uri = f"runs:/{run_id}/model"
     registered_model = mlflow.register_model(model_uri=model_uri, name=model_name)
-    
     
     client = mlflow.tracking.MlflowClient()
     model_version = registered_model.version
