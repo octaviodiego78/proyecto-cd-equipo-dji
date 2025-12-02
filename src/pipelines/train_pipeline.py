@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 import mlflow
@@ -12,6 +13,17 @@ from tensorflow.keras import layers
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
 import time
 from datetime import datetime
+from prefect import flow, task
+
+# Add project root to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import preprocessing utilities
+from src.backend.preprocessing import (
+    save_scaler, 
+    save_feature_columns, 
+    save_model_metadata
+)
 
 load_dotenv()
 
@@ -44,6 +56,7 @@ mlflow.tensorflow.autolog(
 )
 
 
+@task(name="Load and Prepare Data", log_prints=True)
 def load_and_prepare_data():
     gold = pd.read_csv('data/raw/gold_data.csv')
     sp500 = pd.read_csv('data/raw/sp500.csv')
@@ -73,6 +86,7 @@ def load_and_prepare_data():
     return df
 
 
+@task(name="Prepare Train/Test Split", log_prints=True)
 def prepare_train_test_split(df):
     feature_cols = [col for col in df.columns if col not in ['Date', 'Close_gold', 'Close_sp500', 'High_gold', 'Low_gold', 'Open_gold', 'Volume_gold', 'High_sp500', 'Low_sp500', 'Open_sp500', 'Volume_sp500']]
     
@@ -177,6 +191,7 @@ def train_and_log_model(model, X_train, y_train, X_test, y_test, model_name, par
         return run.info.run_id, mape
 
 
+@task(name="Train MLP Baseline", log_prints=True)
 def train_mlp_baseline(X_train, y_train, X_test, y_test):
     model = build_mlp(X_train.shape[1])
     params = {
@@ -191,6 +206,7 @@ def train_mlp_baseline(X_train, y_train, X_test, y_test):
     return train_and_log_model(model, X_train, y_train, X_test, y_test, "MLP_baseline", params)
 
 
+@task(name="Train CNN Baseline", log_prints=True)
 def train_cnn_baseline(X_train, y_train, X_test, y_test):
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
@@ -207,6 +223,7 @@ def train_cnn_baseline(X_train, y_train, X_test, y_test):
     return train_and_log_model(model, X_train_cnn, y_train, X_test_cnn, y_test, "CNN_baseline", params)
 
 
+@task(name="Train LSTM Baseline", log_prints=True)
 def train_lstm_baseline(X_train, y_train, X_test, y_test):
     X_train_lstm = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_lstm = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
@@ -224,6 +241,7 @@ def train_lstm_baseline(X_train, y_train, X_test, y_test):
     return train_and_log_model(model, X_train_lstm, y_train, X_test_lstm, y_test, "LSTM_baseline", params)
 
 
+@task(name="Hyperopt MLP", log_prints=True)
 def hyperopt_mlp(X_train, y_train, X_test, y_test):
     space = {
         'layer1_size': hp.quniform('layer1_size', 32, 128, 16),
@@ -265,6 +283,7 @@ def hyperopt_mlp(X_train, y_train, X_test, y_test):
         return best
 
 
+@task(name="Hyperopt CNN", log_prints=True)
 def hyperopt_cnn(X_train, y_train, X_test, y_test):
     X_train_cnn = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_cnn = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
@@ -307,6 +326,7 @@ def hyperopt_cnn(X_train, y_train, X_test, y_test):
         return best
 
 
+@task(name="Hyperopt LSTM", log_prints=True)
 def hyperopt_lstm(X_train, y_train, X_test, y_test):
     X_train_lstm = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test_lstm = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
@@ -351,6 +371,7 @@ def hyperopt_lstm(X_train, y_train, X_test, y_test):
         return best
 
 
+@task(name="Select Best Model", log_prints=True)
 def select_best_model():
     experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
     runs = mlflow.search_runs(
@@ -366,6 +387,7 @@ def select_best_model():
     return None, None
 
 
+@task(name="Register Champion Model", log_prints=True)
 def register_model_champion(run_id):
     """Register the best model to MLflow"""
 
@@ -389,6 +411,34 @@ def register_model_champion(run_id):
     return registered_model
 
 
+@task(name="Save Artifacts", log_prints=True)
+def save_artifacts_task(scaler, feature_cols, best_model_name):
+    """
+    Save scaler, feature columns, and model metadata to data/processed/
+    
+    Args:
+        scaler: Fitted StandardScaler
+        feature_cols: List of feature column names
+        best_model_name: Name of the best model (MLP, CNN, or LSTM)
+    """
+    # Create processed directory if it doesn't exist
+    os.makedirs('data/processed', exist_ok=True)
+    
+    # Save scaler
+    save_scaler(scaler, 'data/processed/scaler.pkl')
+    
+    # Save feature columns
+    save_feature_columns(feature_cols, 'data/processed/feature_columns.json')
+    
+    # Save model metadata (extract model type from name)
+    model_type = best_model_name.split('_')[0] if '_' in best_model_name else best_model_name
+    save_model_metadata(model_type, 'data/processed/model_metadata.json')
+    
+    print("All artifacts saved successfully!")
+    return True
+
+
+@flow(name="Gold Price Prediction Training Pipeline", log_prints=True)
 def main():
     print("Loading and preparing data...")
     df = load_and_prepare_data()
@@ -434,6 +484,23 @@ def main():
         print(f"\nBest Model - Run ID: {best_run_id} | MAPE: {best_mape:.4f}%")
         registered = register_model_champion(best_run_id)
         print(f"Registered as: {registered.name} v{registered.version} (alias: champion)")
+        
+        # Get the best model name from MLflow
+        experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+        runs = mlflow.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            filter_string=f"status = 'FINISHED' AND tags.run_id = '{best_run_id}'",
+            max_results=1
+        )
+        best_model_name = runs.iloc[0].get('tags.model_type', 'MLP') if len(runs) > 0 else 'MLP'
+        
+        # Save artifacts
+        save_artifacts_task(scaler, feature_cols, best_model_name)
+        
+        print(f"\nPipeline completed successfully!")
+        print(f"Model: {registered.name} v{registered.version}")
+        print(f"Model type: {best_model_name}")
+        print(f"Artifacts saved to data/processed/")
     else:
         print("\nNo finished runs found")
 
