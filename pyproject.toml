@@ -15,5 +15,6 @@ dependencies = [
     "scikit-learn>=1.4.0",
     "tensorflow>=2.15.0,<2.16.0",  # Pin to 2.15.x for NumPy 1.x compatibility
     "hyperopt>=0.2.7",
+    "prefect>=3.6.4",
     "python-dotenv>=1.0.0",
 ]

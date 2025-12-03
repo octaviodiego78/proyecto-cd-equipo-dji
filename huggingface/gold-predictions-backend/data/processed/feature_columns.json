@@ -1,0 +1,12 @@
+{
+  "feature_columns": [
+    "sp500_close_lag1",
+    "gold_close_lag1",
+    "sp500_close_lag2",
+    "gold_close_lag2",
+    "gold_ma_5",
+    "sp500_ma_5",
+    "gold_volatility_5",
+    "sp500_returns_lag1"
+  ]
+}

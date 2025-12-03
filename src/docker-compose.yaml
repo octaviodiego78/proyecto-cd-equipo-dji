@@ -1,0 +1,47 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gold-prediction-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SCALER_PATH=/app/data/processed/scaler.pkl
+      - FEATURE_COLS_PATH=/app/data/processed/feature_columns.json
+      - MODEL_METADATA_PATH=/app/data/processed/model_metadata.json
+    volumes:
+      # Mount the data directory for model artifacts
+      - ../data/processed:/app/data/processed:ro
+      # Mount .env file if it exists (for Databricks credentials)
+      - ../.env:/app/.env:ro
+    networks:
+      - gold-prediction-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gold-prediction-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gold-prediction-network
+    restart: unless-stopped
+
+networks:
+  gold-prediction-network:
+    driver: bridge
+

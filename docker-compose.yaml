@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: src/backend/Dockerfile
+    container_name: gold-prediction-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABRICKS_HOST=${DATABRICKS_HOST}
+      - DATABRICKS_TOKEN=${DATABRICKS_TOKEN}
+      - SCALER_PATH=/app/data/processed/scaler.pkl
+      - FEATURE_COLS_PATH=/app/data/processed/feature_columns.json
+      - MODEL_METADATA_PATH=/app/data/processed/model_metadata.json
+    env_file:
+      - .env
+    networks:
+      - gold-prediction-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./data/processed:/app/data/processed:ro
+      - ./src/backend:/app/src/backend:ro
+
+  frontend:
+    build:
+      context: src/frontend
+      dockerfile: DockerFile
+    container_name: gold-prediction-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gold-prediction-network
+
+networks:
+  gold-prediction-network:
+    driver: bridge
+
